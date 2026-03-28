@@ -2,40 +2,25 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 class JobPostingDataset(Dataset):
-    def __init__(self, texts, labels, tokenizer, max_len=2048):
-        self.texts = texts
-        self.labels = labels
-        self.tokenizer = tokenizer
-        self.max_len = max_len
+    def __init__(self, texts_tok, labels, max_len=2048):
+        self.texts_tok = texts_tok   # already tokenized integer sequences
+        self.labels    = labels
+        self.max_len   = max_len
 
     def __len__(self):
-        return len(self.texts)
+        return len(self.texts_tok)
 
     def __getitem__(self, idx):
-        text = str(self.texts[idx])
-        label = self.labels[idx]
+        tokens = self.texts_tok[idx][:self.max_len]   # truncate to max_len
+        label  = self.labels[idx]
 
-        encoding = self.tokenizer.encode_plus(
-            text,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            padding='max_length',
-            truncation=True,
-            return_attention_mask=True,
-            return_tensors='pt',
-        )
-
-        # Longformer specific: Global Attention Mask
-        # We set global attention on the <s> token (index 0)
-        input_ids = encoding['input_ids'].flatten()
-        attention_mask = encoding['attention_mask'].flatten()
-        global_attention_mask = torch.zeros_like(attention_mask)
-        global_attention_mask[0] = 1
+        # Pad or truncate to max_len
+        pad_len = self.max_len - len(tokens)
+        attention_mask = [1] * len(tokens) + [0] * pad_len
+        tokens         = tokens + [1] * pad_len   # 1 = <pad> index
 
         return {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
-            'global_attention_mask': global_attention_mask,
-            'labels': torch.tensor(label, dtype=torch.long)
+            'input_ids':      torch.tensor(tokens,         dtype=torch.long),
+            'attention_mask': torch.tensor(attention_mask, dtype=torch.long),
+            'labels':         torch.tensor(label,          dtype=torch.long)
         }
-
