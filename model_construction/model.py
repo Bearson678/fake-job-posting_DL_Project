@@ -1,16 +1,52 @@
-"""
+import torch
+import torch.nn as nn
+from model_construction.blocks.blocks import BiGRUBlock, AttentionPooling, NumericalBlock
 
-This module will construct our deep learning model of choice using blocks of layers
 
-The model class should contain the following methods:
+class FakeJobDetector(nn.Module):
 
-    1.  __init__ : define the parameters, layers and relevant functions used in the architecture
-    
-    2. forward : define how foward propgation through the layers is done 
-    
-    3. train : Update the parameters using an optimizer of choice and follow iterations of forward and backward propagation
-    
-    4. Saver and Loader : Save and load a state of the model (parameters)
-    
+    # Two-branch architecture:
+    #  NLP branch: Embedding -> BiGRU -> Attention Pooling
+    #  Numerical branch: 2 Linear layers with ReLU
+    #  Merge: Concatenate -> Linear -> output logit
 
-"""
+    def __init__(
+        self,
+        vocab_size,
+        embed_dim,
+        gru_hidden_dim,
+        num_numerical_features,
+        num_hidden_dim,
+        dropout=0.3,
+        pretrained_embeddings=None,
+    ):
+        super().__init__()
+
+        # NLP branch
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=1)
+        if pretrained_embeddings is not None: #if provided, copy to embedding layer, otherwise random init
+            self.embedding.weight.data.copy_(pretrained_embeddings)
+
+        self.bigru = BiGRUBlock(embed_dim, gru_hidden_dim, dropout)
+        self.attention = AttentionPooling(gru_hidden_dim)
+
+        # Numerical branch
+        self.numerical = NumericalBlock(num_numerical_features, num_hidden_dim, dropout)
+
+        #Merge branch
+        merge_input_dim = (gru_hidden_dim * 2) + num_hidden_dim
+        self.classifier = nn.Linear(merge_input_dim, 1)
+
+    def forward(self, input_ids, attention_mask, numerical_features):
+        # NLP branch
+        embedded = self.embedding(input_ids)             # (batch, seq_len, embed_dim)
+        gru_out = self.bigru(embedded)                   # (batch, seq_len, gru_hidden * 2)
+        nlp_out = self.attention(gru_out, attention_mask) # (batch, gru_hidden * 2)
+
+        # Numerical branch
+        num_out = self.numerical(numerical_features)      # (batch, num_hidden)
+
+        # Merge
+        merged = torch.cat([nlp_out, num_out], dim=1)
+        logit = self.classifier(merged).squeeze(-1)       # (batch, 1) -> (batch,)
+        return logit #apply sigmoid outside the forward pass so doesnt interfere with training
