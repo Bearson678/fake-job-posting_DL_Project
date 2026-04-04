@@ -62,37 +62,92 @@ class FakeJobDetector(nn.Module):
         return logit #apply sigmoid outside the forward pass so doesnt interfere with training
     
     
-    def train(self,dataloader,num_epochs,learning_rate):
-        ## Implements training loop for the model, Returns list of epoch losses for monitoring
-        
-        ## Loss calculation and optimization logic using Binary Cross-Entropy Loss and Adam optimizer.
-        
-        ## This follows a simple binary classification training loop structure, 
-        ## iterating over epochs and batches, computing loss, backpropagating, and updating weights.
-        
-        ## The NLP processing are done instead in the forward pass.
+    def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt"):
+        # pos_weight upweights fake job loss to improve recall
         criterion = nn.BCELoss()
-        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
-        epoch_losses = []
+            
+        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=1e-3)
+        
+        train_losses     = []
+        val_losses       = []
+        best_val_loss    = float('inf')
+
         for epoch in range(num_epochs):
-            total_loss = 0.0
-            optimizer.zero_grad()
-            for inputs,targets in dataloader:
-                input_ids = inputs['input_ids']
-                attention_mask = inputs['attention_mask']
+            # --- Training ---
+            self.train()
+            total_train_loss = 0.0
+
+            for inputs, targets in dataloader:
+                optimizer.zero_grad()
+                input_ids          = inputs['input_ids']
+                attention_mask     = inputs['attention_mask']
                 numerical_features = inputs['numerical_features']
-                targets = targets.to(self.device).float() #ensure targets are float for BCELoss
+                targets            = targets.to(self.device).float()
+
                 outputs = self.forward(input_ids, attention_mask, numerical_features)
-                loss = criterion(torch.sigmoid(outputs), targets) #apply sigmoid to outputs for BCELoss
+                loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid, BCEWithLogitsLoss handles it
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
                 optimizer.step()
-                total_loss += loss.item()
-            avg_loss = total_loss / len(dataloader)
-            epoch_losses.append(avg_loss)
-            print(f"Epoch {epoch+1}/{num_epochs}, Loss: {avg_loss:.4f}")
-        return epoch_losses
-    
-    
+                total_train_loss += loss.item()
+
+            avg_train_loss = total_train_loss / len(dataloader)
+            train_losses.append(avg_train_loss)
+
+            # --- Validation ---
+            self.eval()
+            total_val_loss = 0.0
+
+            with torch.no_grad():
+                for inputs, targets in val_dataloader:
+                    input_ids          = inputs['input_ids']
+                    attention_mask     = inputs['attention_mask']
+                    numerical_features = inputs['numerical_features']
+                    targets            = targets.to(self.device).float()
+
+                    outputs = self.forward(input_ids, attention_mask, numerical_features)
+                    loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid
+                    total_val_loss += loss.item()
+
+            avg_val_loss = total_val_loss / len(val_dataloader)
+            val_losses.append(avg_val_loss)
+
+            print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+
+            # --- Early Stopping ---
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                self.save(save_path)
+                print(f"  ✅ Best model saved (val_loss={best_val_loss:.4f})")
+            else:
+                print(f"  ⚠️ No improvement (best_val_loss={best_val_loss:.4f})")
+
+        self.load(save_path)
+        print(f"\nRestored best model with val_loss={best_val_loss:.4f}")
+        return train_losses, val_losses
+
+
+    def evaluate(self, dataloader, threshold=0.3):
+        from sklearn.metrics import classification_report
+        
+        self.eval()
+        all_preds  = []
+        all_labels = []
+
+        with torch.no_grad():
+            for inputs, targets in dataloader:
+                input_ids          = inputs['input_ids']
+                attention_mask     = inputs['attention_mask']
+                numerical_features = inputs['numerical_features']
+                targets            = targets.to(self.device).float()
+
+                outputs = self.forward(input_ids, attention_mask, numerical_features)
+                preds   = (torch.sigmoid(outputs) >= threshold).long()  # ✅ tunable threshold
+
+                all_preds.extend(preds.cpu().tolist())
+                all_labels.extend(targets.long().cpu().tolist())
+
+        print(classification_report(all_labels, all_preds, target_names=['Real', 'Fake']))
     def save(self,path):
         ### Implement model saving logic here
         torch.save(self.state_dict(), path)
