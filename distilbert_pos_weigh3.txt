@@ -1,0 +1,85 @@
+Epoch 1/20 | Train Loss: 0.3206 | Val Loss: 0.2485
+  ✅ Best model saved (val_loss=0.2485)
+Epoch 2/20 | Train Loss: 0.2188 | Val Loss: 0.1886
+  ✅ Best model saved (val_loss=0.1886)
+Epoch 3/20 | Train Loss: 0.1782 | Val Loss: 0.2048
+  ⚠️ No improvement (best_val_loss=0.1886)
+Epoch 4/20 | Train Loss: 0.1672 | Val Loss: 0.1746
+  ✅ Best model saved (val_loss=0.1746)
+Epoch 5/20 | Train Loss: 0.1553 | Val Loss: 0.1481
+  ✅ Best model saved (val_loss=0.1481)
+Epoch 6/20 | Train Loss: 0.1428 | Val Loss: 0.1435
+  ✅ Best model saved (val_loss=0.1435)
+Epoch 7/20 | Train Loss: 0.1358 | Val Loss: 0.2252
+  ⚠️ No improvement (best_val_loss=0.1435)
+Epoch 8/20 | Train Loss: 0.1208 | Val Loss: 0.1621
+  ⚠️ No improvement (best_val_loss=0.1435)
+Epoch 9/20 | Train Loss: 0.1240 | Val Loss: 0.2118
+  ⚠️ No improvement (best_val_loss=0.1435)
+Epoch 10/20 | Train Loss: 0.1190 | Val Loss: 0.1993
+  ⚠️ No improvement (best_val_loss=0.1435)
+Epoch 11/20 | Train Loss: 0.1192 | Val Loss: 0.1543
+  ⚠️ No improvement (best_val_loss=0.1435)
+Epoch 12/20 | Train Loss: 0.1152 | Val Loss: 0.1596
+  ⚠️ No improvement (best_val_loss=0.1435)
+Epoch 13/20 | Train Loss: 0.1112 | Val Loss: 0.2882
+  ⚠️ No improvement (best_val_loss=0.1435)
+Epoch 14/20 | Train Loss: 0.1133 | Val Loss: 0.1245
+  ✅ Best model saved (val_loss=0.1245)
+Epoch 15/20 | Train Loss: 0.1078 | Val Loss: 0.1257
+  ⚠️ No improvement (best_val_loss=0.1245)
+Epoch 16/20 | Train Loss: 0.1050 | Val Loss: 0.2744
+  ⚠️ No improvement (best_val_loss=0.1245)
+Epoch 17/20 | Train Loss: 0.0992 | Val Loss: 0.4078
+  ⚠️ No improvement (best_val_loss=0.1245)
+Epoch 18/20 | Train Loss: 0.1061 | Val Loss: 0.1570
+  ⚠️ No improvement (best_val_loss=0.1245)
+Epoch 19/20 | Train Loss: 0.1035 | Val Loss: 0.3327
+  ⚠️ No improvement (best_val_loss=0.1245)
+Epoch 20/20 | Train Loss: 0.1037 | Val Loss: 0.2511
+  ⚠️ No improvement (best_val_loss=0.1245)
+
+Restored best model with val_loss=0.1245
+
+--- Threshold: 0.2 ---
+              precision    recall  f1-score   support
+
+        Real       0.99      0.96      0.97      1280
+        Fake       0.52      0.87      0.65        69
+
+    accuracy                           0.95      1349
+   macro avg       0.75      0.91      0.81      1349
+weighted avg       0.97      0.95      0.96      1349
+
+
+--- Threshold: 0.3 ---
+              precision    recall  f1-score   support
+
+        Real       0.99      0.97      0.98      1280
+        Fake       0.57      0.84      0.68        69
+
+    accuracy                           0.96      1349
+   macro avg       0.78      0.90      0.83      1349
+weighted avg       0.97      0.96      0.96      1349
+
+
+--- Threshold: 0.4 ---
+              precision    recall  f1-score   support
+
+        Real       0.99      0.97      0.98      1280
+        Fake       0.64      0.83      0.72        69
+
+    accuracy                           0.97      1349
+   macro avg       0.82      0.90      0.85      1349
+weighted avg       0.97      0.97      0.97      1349
+
+
+--- Threshold: 0.5 ---
+              precision    recall  f1-score   support
+
+        Real       0.99      0.98      0.99      1280
+        Fake       0.71      0.81      0.76        69
+
+    accuracy                           0.97      1349
+   macro avg       0.85      0.90      0.87      1349
+weighted avg       0.98      0.97      0.97      1349

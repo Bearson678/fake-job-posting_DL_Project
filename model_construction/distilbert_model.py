@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from model_construction.blocks.blocks import BiGRUBlock, AttentionPooling, NumericalBlock, MultiHeadAttentionPooling
-from torchvision.ops import sigmoid_focal_loss
+from model_construction.blocks.blocks import BiGRUBlock, AttentionPooling, NumericalBlock
+from transformers import DistilBertModel
 
 
 class FakeJobDetector(nn.Module):
@@ -13,26 +13,34 @@ class FakeJobDetector(nn.Module):
 
     def __init__(
         self,
-        vocab_size,
-        embed_dim,
+        #vocab_size,
+        #embed_dim,
         gru_hidden_dim,
         num_numerical_features,
         num_hidden_dim,
-        dropout=0.3,
-        pretrained_embeddings=None,
+        dropout= 0.3,#0.3, #original value
+        #pretrained_embeddings=None,
         device='cpu'
     ):
         super().__init__()
         self.device = torch.device(device)
 
         # NLP branch
-        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=1)
+        '''self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=1)
         if pretrained_embeddings is not None: #if provided, copy to embedding layer, otherwise random init
             self.embedding.weight.data.copy_(pretrained_embeddings)
+            #self.embedding.weight.requires_grad = False  # freeze embeddings so only weights are trained'''
+        
+        self.distilbert = DistilBertModel.from_pretrained("distilbert-base-uncased")
+        for param in self.distilbert.parameters():
+            param.requires_grad = False  # freeze DistilBERT
 
-        self.bigru = BiGRUBlock(embed_dim, gru_hidden_dim, dropout)
-        #self.attention = AttentionPooling(gru_hidden_dim)
-        self.attention = MultiHeadAttentionPooling(gru_hidden_dim)
+        #embedded = self.embedding(input_ids)             # (batch, seq_len, 100)
+        
+        #self.bigru = BiGRUBlock(embed_dim, gru_hidden_dim, dropout)
+        # BiGRU takes 768-dim DistilBERT vectors
+        self.bigru = BiGRUBlock(768, gru_hidden_dim, dropout)
+        self.attention = AttentionPooling(gru_hidden_dim)
 
         # Numerical branch
         self.numerical = NumericalBlock(num_numerical_features, num_hidden_dim, dropout)
@@ -51,7 +59,9 @@ class FakeJobDetector(nn.Module):
         numerical_features = numerical_features.to(self.device)
         
         # NLP branch
-        embedded = self.embedding(input_ids)             # (batch, seq_len, embed_dim)
+        #embedded = self.embedding(input_ids)             # (batch, seq_len, embed_dim)
+        with torch.no_grad():
+            embedded = self.distilbert(input_ids, attention_mask=attention_mask).last_hidden_state  # (batch, seq_len, 768)
         gru_out = self.bigru(embedded)                   # (batch, seq_len, gru_hidden * 2)
         nlp_out = self.attention(gru_out, attention_mask) # (batch, gru_hidden * 2)
 
@@ -67,10 +77,11 @@ class FakeJobDetector(nn.Module):
     def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt", pos_weight=None):
         # pos_weight upweights fake job loss to improve recall
         #criterion = nn.BCELoss()
-        #pos_weight = torch.tensor([pos_weight], device=self.device) if pos_weight is not None else None
-        #criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        pos_weight = torch.tensor([pos_weight], device=self.device) if pos_weight is not None else None
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
             
         optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=1e-3)
+        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5) #patience is the number of epochs with no improvement before halving lr
         
         train_losses     = []
         val_losses       = []
@@ -81,17 +92,19 @@ class FakeJobDetector(nn.Module):
             self.train()
             total_train_loss = 0.0
 
-            for inputs, targets in dataloader:
+            '''for inputs, targets in dataloader:
                 optimizer.zero_grad()
                 input_ids          = inputs['input_ids']
                 attention_mask     = inputs['attention_mask']
                 numerical_features = inputs['numerical_features']
-                targets            = targets.to(self.device).float()
+                targets = targets.to(self.device).float()'''
+            for input_ids, attention_mask, numerical_features, targets in dataloader:
+                optimizer.zero_grad()
+                targets = targets.to(self.device).float()
 
                 outputs = self.forward(input_ids, attention_mask, numerical_features)
                 #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid, BCEWithLogitsLoss handles it
-                #loss = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
-                loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                loss = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
                 optimizer.step()
@@ -105,20 +118,22 @@ class FakeJobDetector(nn.Module):
             total_val_loss = 0.0
 
             with torch.no_grad():
-                for inputs, targets in val_dataloader:
+                '''for inputs, targets in val_dataloader:
                     input_ids          = inputs['input_ids']
                     attention_mask     = inputs['attention_mask']
                     numerical_features = inputs['numerical_features']
-                    targets            = targets.to(self.device).float()
+                    targets            = targets.to(self.device).float()'''
+                for input_ids, attention_mask, numerical_features, targets in val_dataloader:
+                    targets = targets.to(self.device).float()
 
                     outputs = self.forward(input_ids, attention_mask, numerical_features)
                     #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid
-                    #loss   = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
-                    loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                    loss   = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
                     total_val_loss += loss.item()
 
             avg_val_loss = total_val_loss / len(val_dataloader)
             val_losses.append(avg_val_loss)
+            #scheduler.step(avg_val_loss)
 
             print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
@@ -143,11 +158,13 @@ class FakeJobDetector(nn.Module):
         all_labels = []
 
         with torch.no_grad():
-            for inputs, targets in dataloader:
+            '''for inputs, targets in dataloader:
                 input_ids          = inputs['input_ids']
                 attention_mask     = inputs['attention_mask']
                 numerical_features = inputs['numerical_features']
-                targets            = targets.to(self.device).float()
+                targets            = targets.to(self.device).float()'''
+            for input_ids, attention_mask, numerical_features, targets in dataloader:
+                targets = targets.to(self.device).float()
 
                 outputs = self.forward(input_ids, attention_mask, numerical_features)
                 preds   = (torch.sigmoid(outputs) >= threshold).long()  # ✅ tunable threshold

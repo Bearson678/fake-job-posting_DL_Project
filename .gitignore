@@ -22,3 +22,16 @@ rad.json
 TestResults.xml
 #Venv
 .venv/
+.venv310/
+
+optimal_fasttext.bin.wv.vectors_ngrams.npy
+optimal_fasttext.bin
+pos_weight*
+
+data/cache/
+
+__pycache__/
+
+best_model_distilbert.pt
+best_model_v2.pt
+best_model_v3.pt

@@ -45,6 +45,30 @@ class AttentionPooling(nn.Module):
         pooled = (gru_output * weights).sum(dim=1)  # (batch, hidden_dim * 2) concatenate the sum of all token * weight, control contribution to final vector
         return pooled
 
+class MultiHeadAttentionPooling(nn.Module):
+    def __init__(self, hidden_dim, num_heads=2):
+        super().__init__()
+        self.heads = nn.ModuleList([
+            nn.Linear(hidden_dim * 2, 1) for _ in range(num_heads)
+        ])
+        # project concatenated heads back to original dim
+        self.projection = nn.Linear(hidden_dim * 2 * num_heads, hidden_dim * 2)
+        self.dropout = nn.Dropout(0.3)
+
+    def forward(self, gru_output, attention_mask):
+        # gru_output: (batch, seq_len, hidden_dim * 2)
+        head_outputs = []
+        for head in self.heads:
+            scores = head(gru_output).squeeze(-1)              # (batch, seq_len)
+            scores = scores.masked_fill(attention_mask == 0, float('-inf'))
+            weights = torch.softmax(scores, dim=1).unsqueeze(-1)  # (batch, seq_len, 1)
+            pooled = (gru_output * weights).sum(dim=1)            # (batch, hidden_dim * 2)
+            head_outputs.append(pooled)
+
+        combined = torch.cat(head_outputs, dim=1)  # (batch, hidden_dim * 2 * num_heads)
+        #return self.projection(combined)            # (batch, hidden_dim * 2)
+        return self.dropout(self.projection(combined))
+
 
 
 class NumericalBlock(nn.Module):
