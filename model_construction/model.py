@@ -156,6 +156,50 @@ class FakeJobDetector(nn.Module):
                 all_labels.extend(targets.long().cpu().tolist())
 
         print(classification_report(all_labels, all_preds, target_names=['Real', 'Fake']))
+
+    def evaluate_branches(self, dataloader, threshold=0.3):
+        from sklearn.metrics import classification_report
+
+        configs = {
+            "Full model":       dict(zero_nlp=False, zero_num=False),
+            "NLP only":         dict(zero_nlp=False, zero_num=True),
+            "Numerical only":   dict(zero_nlp=True,  zero_num=False),
+            "Both zeroed":      dict(zero_nlp=True,  zero_num=True),
+        }
+
+        for name, cfg in configs.items():
+            self.eval()
+            all_preds, all_labels = [], []
+
+            with torch.no_grad():
+                for inputs, targets in dataloader:
+                    input_ids          = inputs['input_ids']
+                    attention_mask     = inputs['attention_mask']
+                    numerical_features = inputs['numerical_features'].to(self.device)
+                    targets            = targets.to(self.device).float()
+
+                    # --- Forward with ablation ---
+                    embedded = self.embedding(input_ids.to(self.device))
+                    gru_out  = self.bigru(embedded)
+                    nlp_out  = self.attention(gru_out, attention_mask.to(self.device))
+                    num_out  = self.numerical(numerical_features)
+
+                    if cfg["zero_nlp"]:
+                        nlp_out = torch.zeros_like(nlp_out)
+                    if cfg["zero_num"]:
+                        num_out = torch.zeros_like(num_out)
+
+                    merged = torch.cat([nlp_out, num_out], dim=1)
+                    logit  = self.classifier(merged).squeeze(-1)
+                    preds  = (torch.sigmoid(logit) >= threshold).long()
+
+                    all_preds.extend(preds.cpu().tolist())
+                    all_labels.extend(targets.long().cpu().tolist())
+
+            print(f"\n{'='*40}\n{name}")
+            print(classification_report(all_labels, all_preds, target_names=['Real', 'Fake']))
+
+
     def save(self,path):
         ### Implement model saving logic here
         torch.save(self.state_dict(), path)
@@ -166,3 +210,4 @@ class FakeJobDetector(nn.Module):
         self.load_state_dict(torch.load(path,map_location=self.device))
         self.to(self.device) #load to cpu by default, can be modified to load to gpu if needed
         return
+    
