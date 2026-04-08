@@ -75,14 +75,10 @@ class FakeJobDetector(nn.Module):
     
     
     def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt", pos_weight=None):
-        # pos_weight upweights fake job loss to improve recall
-        #criterion = nn.BCELoss()
         pos_weight = torch.tensor([pos_weight], device=self.device) if pos_weight is not None else None
         criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
             
         optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=1e-3)
-        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5) #patience is the number of epochs with no improvement before halving lr
-        
         train_losses     = []
         val_losses       = []
         best_val_loss    = float('inf')
@@ -103,8 +99,7 @@ class FakeJobDetector(nn.Module):
                 targets = targets.to(self.device).float()
 
                 outputs = self.forward(input_ids, attention_mask, numerical_features)
-                #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid, BCEWithLogitsLoss handles it
-                loss = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
+                loss = criterion(outputs, targets) 
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
                 optimizer.step()
@@ -118,26 +113,18 @@ class FakeJobDetector(nn.Module):
             total_val_loss = 0.0
 
             with torch.no_grad():
-                '''for inputs, targets in val_dataloader:
-                    input_ids          = inputs['input_ids']
-                    attention_mask     = inputs['attention_mask']
-                    numerical_features = inputs['numerical_features']
-                    targets            = targets.to(self.device).float()'''
                 for input_ids, attention_mask, numerical_features, targets in val_dataloader:
                     targets = targets.to(self.device).float()
 
                     outputs = self.forward(input_ids, attention_mask, numerical_features)
-                    #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid
-                    loss   = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
+                    loss   = criterion(outputs, targets)  
                     total_val_loss += loss.item()
 
             avg_val_loss = total_val_loss / len(val_dataloader)
             val_losses.append(avg_val_loss)
-            #scheduler.step(avg_val_loss)
-
             print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-            # --- Early Stopping ---
+            # --- Saving best model ---
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 self.save(save_path)

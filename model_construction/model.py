@@ -22,6 +22,7 @@ class FakeJobDetector(nn.Module):
         pretrained_embeddings=None,
         device='cpu'
     ):
+        """Initialize the model with given hyperparameters and architecture components."""
         super().__init__()
         self.device = torch.device(device)
 
@@ -45,6 +46,7 @@ class FakeJobDetector(nn.Module):
         
 
     def forward(self, input_ids, attention_mask, numerical_features):
+        """Forward pass through the model. Returns raw logits (no sigmoid) for use with criterion function later."""
         # Prep inputs to device
         input_ids = input_ids.to(self.device)
         attention_mask = attention_mask.to(self.device)
@@ -65,10 +67,7 @@ class FakeJobDetector(nn.Module):
     
     
     def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt", pos_weight=None):
-        # pos_weight upweights fake job loss to improve recall
-        #criterion = nn.BCELoss()
-        #pos_weight = torch.tensor([pos_weight], device=self.device) if pos_weight is not None else None
-        #criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        """Train the model with early stopping based on validation loss. Optionally use pos_weight for imbalanced data."""
             
         optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=1e-3)
         
@@ -89,8 +88,6 @@ class FakeJobDetector(nn.Module):
                 targets            = targets.to(self.device).float()
 
                 outputs = self.forward(input_ids, attention_mask, numerical_features)
-                #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid, BCEWithLogitsLoss handles it
-                #loss = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
                 loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
@@ -112,8 +109,6 @@ class FakeJobDetector(nn.Module):
                     targets            = targets.to(self.device).float()
 
                     outputs = self.forward(input_ids, attention_mask, numerical_features)
-                    #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid
-                    #loss   = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
                     loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
                     total_val_loss += loss.item()
 
@@ -122,7 +117,7 @@ class FakeJobDetector(nn.Module):
 
             print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-            # --- Early Stopping ---
+            # --- Saving best model ---
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 self.save(save_path)
@@ -136,6 +131,7 @@ class FakeJobDetector(nn.Module):
 
 
     def evaluate(self, dataloader, threshold=0.3):
+        """Evaluate model performance on the given dataloader and print classification report."""
         from sklearn.metrics import classification_report
         
         self.eval()
@@ -158,6 +154,7 @@ class FakeJobDetector(nn.Module):
         print(classification_report(all_labels, all_preds, target_names=['Real', 'Fake']))
 
     def evaluate_branches(self, dataloader, threshold=0.3):
+        """Evaluate model performance with different branch combinations to understand contribution of each modality."""
         from sklearn.metrics import classification_report
 
         configs = {
@@ -178,12 +175,12 @@ class FakeJobDetector(nn.Module):
                     numerical_features = inputs['numerical_features'].to(self.device)
                     targets            = targets.to(self.device).float()
 
-                    # --- Forward with ablation ---
+                    # Forward pass with branch control
                     embedded = self.embedding(input_ids.to(self.device))
                     gru_out  = self.bigru(embedded)
                     nlp_out  = self.attention(gru_out, attention_mask.to(self.device))
                     num_out  = self.numerical(numerical_features)
-
+                    # Zero out branches as per config
                     if cfg["zero_nlp"]:
                         nlp_out = torch.zeros_like(nlp_out)
                     if cfg["zero_num"]:
