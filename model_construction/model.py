@@ -36,6 +36,9 @@ class FakeJobDetector(nn.Module):
 
         # Numerical branch
         self.numerical = NumericalBlock(num_numerical_features, num_hidden_dim, dropout)
+        
+        # Auxiliary head on numerical branch (forces it to learn independently)
+        self.aux_classifier = nn.Linear(num_hidden_dim, 1)
 
         #Merge branch
         merge_input_dim = (gru_hidden_dim * 2) + num_hidden_dim
@@ -61,10 +64,14 @@ class FakeJobDetector(nn.Module):
         # Merge
         merged = torch.cat([nlp_out, num_out], dim=1)
         logit = self.classifier(merged).squeeze(-1)       # (batch, 1) -> (batch,)
+        
+        aux_logit = self.aux_classifier(num_out).squeeze(-1)  # numerical branch only
+        return logit, aux_logit
+        
         return logit #apply sigmoid outside the forward pass so doesnt interfere with training
     
     
-    def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt", pos_weight=None):
+    def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt", pos_weight=None, aux_weight=0):
         # pos_weight upweights fake job loss to improve recall
         #criterion = nn.BCELoss()
         #pos_weight = torch.tensor([pos_weight], device=self.device) if pos_weight is not None else None
@@ -88,10 +95,15 @@ class FakeJobDetector(nn.Module):
                 numerical_features = inputs['numerical_features']
                 targets            = targets.to(self.device).float()
 
-                outputs = self.forward(input_ids, attention_mask, numerical_features)
+                outputs, aux_outputs = self.forward(input_ids, attention_mask, numerical_features)
                 #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid, BCEWithLogitsLoss handles it
                 #loss = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
-                loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                
+                #loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                main_loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                aux_loss  = sigmoid_focal_loss(aux_outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                loss = main_loss + (aux_weight * aux_loss)
+                
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
                 optimizer.step()
@@ -111,10 +123,15 @@ class FakeJobDetector(nn.Module):
                     numerical_features = inputs['numerical_features']
                     targets            = targets.to(self.device).float()
 
-                    outputs = self.forward(input_ids, attention_mask, numerical_features)
+                    outputs, aux_outputs = self.forward(input_ids, attention_mask, numerical_features)
                     #loss    = criterion(torch.sigmoid(outputs), targets)  # ✅ no sigmoid
                     #loss   = criterion(outputs, targets)  # no sigmoid, BCEWithLogitsLoss handles it
-                    loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                    
+                    #loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                    main_loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                    aux_loss  = sigmoid_focal_loss(aux_outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
+                    loss = main_loss + (aux_weight * aux_loss)
+                    
                     total_val_loss += loss.item()
 
             avg_val_loss = total_val_loss / len(val_dataloader)
@@ -149,7 +166,7 @@ class FakeJobDetector(nn.Module):
                 numerical_features = inputs['numerical_features']
                 targets            = targets.to(self.device).float()
 
-                outputs = self.forward(input_ids, attention_mask, numerical_features)
+                outputs, _ = self.forward(input_ids, attention_mask, numerical_features)
                 preds   = (torch.sigmoid(outputs) >= threshold).long()  # ✅ tunable threshold
 
                 all_preds.extend(preds.cpu().tolist())
