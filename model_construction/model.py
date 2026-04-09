@@ -3,6 +3,8 @@ import torch.nn as nn
 from model_construction.blocks.blocks import BiGRUBlock, AttentionPooling, NumericalBlock, MultiHeadAttentionPooling
 from torchvision.ops import sigmoid_focal_loss
 
+from sklearn.metrics import classification_report
+
 
 class FakeJobDetector(nn.Module):
 
@@ -66,19 +68,23 @@ class FakeJobDetector(nn.Module):
         return logit #apply sigmoid outside the forward pass so doesnt interfere with training
     
     
-    def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt", pos_weight=None):
-        """Train the model with early stopping based on validation loss. Optionally use pos_weight for imbalanced data."""
+    def fit(self, dataloader, val_dataloader, num_epochs, learning_rate, save_path="best_model.pt"):
+        """Train the model using the provided dataloader and validation dataloader."""
             
         optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=1e-3)
         
         train_losses     = []
         val_losses       = []
+        train_accuracy   = []
+        val_accuracy     = []
         best_val_loss    = float('inf')
 
         for epoch in range(num_epochs):
             # --- Training ---
             self.train()
             total_train_loss = 0.0
+            train_correct = 0
+            train_total = 0
 
             for inputs, targets in dataloader:
                 optimizer.zero_grad()
@@ -94,12 +100,19 @@ class FakeJobDetector(nn.Module):
                 optimizer.step()
                 total_train_loss += loss.item()
 
+                preds = (torch.sigmoid(outputs) >= 0.3).long()
+                train_correct += (preds == targets.long()).sum().item()
+                train_total   += targets.size(0)
+
             avg_train_loss = total_train_loss / len(dataloader)
             train_losses.append(avg_train_loss)
+            train_accuracy.append(train_correct / train_total)
 
             # --- Validation ---
             self.eval()
             total_val_loss = 0.0
+            val_correct = 0
+            val_total = 0
 
             with torch.no_grad():
                 for inputs, targets in val_dataloader:
@@ -112,12 +125,17 @@ class FakeJobDetector(nn.Module):
                     loss = sigmoid_focal_loss(outputs, targets, alpha=0.75, gamma=1.0, reduction='mean')
                     total_val_loss += loss.item()
 
+                    preds = (torch.sigmoid(outputs) >= 0.3).long()
+                    val_correct += (preds == targets.long()).sum().item()
+                    val_total   += targets.size(0)
+
             avg_val_loss = total_val_loss / len(val_dataloader)
             val_losses.append(avg_val_loss)
+            val_accuracy.append(val_correct / val_total)
 
             print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-            # --- Saving best model ---
+            # --- Save Best Model ---
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 self.save(save_path)
@@ -127,12 +145,12 @@ class FakeJobDetector(nn.Module):
 
         self.load(save_path)
         print(f"\nRestored best model with val_loss={best_val_loss:.4f}")
-        return train_losses, val_losses
+        return train_losses, val_losses, train_accuracy, val_accuracy
 
 
     def evaluate(self, dataloader, threshold=0.3):
         """Evaluate model performance on the given dataloader and print classification report."""
-        from sklearn.metrics import classification_report
+        
         
         self.eval()
         all_preds  = []
@@ -152,6 +170,12 @@ class FakeJobDetector(nn.Module):
                 all_labels.extend(targets.long().cpu().tolist())
 
         print(classification_report(all_labels, all_preds, target_names=['Real', 'Fake']))
+        
+        
+
+
+
+
 
     def evaluate_branches(self, dataloader, threshold=0.3):
         """Evaluate model performance with different branch combinations to understand contribution of each modality."""
