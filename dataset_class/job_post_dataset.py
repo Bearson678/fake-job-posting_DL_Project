@@ -28,25 +28,3 @@ class JobPostingDataset(Dataset):
         label = torch.tensor(label, dtype=torch.float)  # float for BCELoss
         return inputs, label
     
-
-"""Guide to use the dataset"""
-
-
-# import numpy as np
-
-# numeric_cols = ["telecommuting", "missing_count", "total_text_len", "company_profile_len", "description_len", 
-#                 "requirements_len", "benefits_len", "company_profile_word_count", "description_word_count", 
-#                 "requirements_word_count", "benefits_word_count", "salary_provided", "has_company_profile",
-#                 "vague_location", "has_company_logo", "has_questions"]
-
-# numerical_array = combined_df[numeric_cols].to_numpy(dtype=np.float32)  # (N, 16)
-# labels_array    = combined_df['fraudulent'].to_numpy(dtype=np.float32)  # (N,)
-
-# dataset = JobPostingDataset(
-#     texts_tok           = tokenized_texts,   # your tokenized sequences
-#     numerical_features  = numerical_array,
-#     labels              = labels_array,
-#     max_len             = 2048
-# )
-
-# dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
