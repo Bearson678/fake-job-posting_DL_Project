@@ -1,6 +1,10 @@
-To set up the project, create a Python virtual environment and install the required dependencies from ‘requirements.txt’ via the terminal commands:
+# Project Setup and Training Guide
 
-```python
+## Environment Setup
+
+Create a Python virtual environment and install the required dependencies from `requirements.txt`.
+
+```bash
 py -3.10 -m venv .venv310
 .\.venv310\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -8,57 +12,81 @@ pip install -r requirements.txt
 jupyter lab
 ```
 
-To train the model from scratch, ensure that “fake_job_postings_ALL.csv” is in the “/data/clean” directory.
+## Training From Scratch
 
-To download the clean weights, go to https://drive.google.com/drive/folders/1buxqOhkYUN2XV3OI7jawNvOFpSrOKMNH?usp=sharing. And download both files, inserting it in the root folder of the program. 
+To train the model from scratch, ensure that:
 
-Under Model_training.ipynb, run all of the following cells from “Dataset Loading” to “Model Training”.
+- `fake_job_postings_ALL.csv` is placed inside the `data/clean/` directory
 
-Below are the markdown cell sections and their functions in notebook order:
+Then open `Model_training.ipynb` and run all cells from **Dataset Loading** through **Model Training**.
 
-Dataset Loading:
-- Makes all necessary imports, sets torch seed and loads in cleaned dataset.
+## Downloading Pretrained Weights
 
-Train-Test-Validation Split:
-- Splits up the dataset and converts value type for tensor conversion.
+To use the pre-trained model weights instead of training from scratch:
 
-Non-binary value Standardisation: 
+1. Go to the Google Drive folder below:  
+   [Download pretrained weights](https://drive.google.com/drive/folders/1buxqOhkYUN2XV3OI7jawNvOFpSrOKMNH?usp=sharing)
+
+2. Download both files
+
+3. Place both files in the **root directory** of the project
+
+## Notebook Workflow
+
+Below are the main markdown sections in `Model_training.ipynb` and what each one does.
+
+### 1. Dataset Loading
+- Imports all required libraries
+- Sets the Torch seed
+- Loads the cleaned dataset
+
+### 2. Train-Test-Validation Split
+- Splits the dataset into training, validation, and test sets
+- Converts values into suitable types for tensor conversion
+
+### 3. Non-binary Value Standardisation
 - Standardises non-binary numeric columns
-  
-Loading of fine-tuned FastText model:
-- loads the FastText model to extract embedding matrix
-  
-Tokenizing and encoding tokens into numerical values:
-- provide numerical representations for the text samples and cache them
-  
-Instantiating Datasets:
-- Instantiate Dataset and DataLoader class
-  
-Testing Dataloader by sampling a batch:
-- ensures that the custom dataset class is working
-  
-Creating the embedding matrix:
-- gets the embeddings from the FastText model and prepares it to be copied into the model
-  
-Model Instantiation:
-- Instantiates the model
 
-Model Training:
+### 4. Loading of Fine-tuned FastText Model
+- Loads the FastText model
+- Extracts the embedding matrix
+
+### 5. Tokenizing and Encoding Tokens into Numerical Values
+- Converts text samples into numerical representations
+- Caches the processed outputs
+
+### 6. Instantiating Datasets
+- Instantiates the custom `Dataset` and `DataLoader` classes
+
+### 7. Testing Dataloader by Sampling a Batch
+- Verifies that the custom dataset class is working correctly
+
+### 8. Creating the Embedding Matrix
+- Retrieves embeddings from the FastText model
+- Prepares them to be copied into the model
+
+### 9. Model Instantiation
+- Instantiates the model architecture
+
+### 10. Model Training
 - Trains the model
-  
-Hyperparameter Threshold Tuning:
-- Hyperparameter tuning of the sigmoid threshold value
-  
-Model Branch Evaluation:
-- Compares the performance of both the NLP and numeric branch
-  
-Loss and Accuracy Visualisations:
-- Provides visual figures of the results from training
-  
-Confusion Matrix Report Visualisation:
-- Provides confusion matrices for evaluation metrics such as precision and recall.
-  
-Hyperparameter GRU/Hidden layer dimension tuning:
-- Hyperparameter tuning of the model dimension parameters.
 
-Avoid running the “Hyperparameter GRU/Hidden layer dimension tuning” unless necessary, this will take quite some time to run and our best track record was 5 hours.
+### 11. Hyperparameter Threshold Tuning
+- Tunes the sigmoid threshold value
+
+### 12. Model Branch Evaluation
+- Compares the performance of the NLP branch and numeric branch
+
+### 13. Loss and Accuracy Visualisations
+- Generates visualisations of training results
+
+### 14. Confusion Matrix Report Visualisation
+- Displays confusion matrices and evaluation metrics such as precision and recall
+
+### 15. Hyperparameter GRU / Hidden Layer Dimension Tuning
+- Tunes model dimension-related hyperparameters
+
+## Important Note
+
+Avoid running **Hyperparameter GRU / Hidden Layer Dimension Tuning** unless necessary.  
+This step is computationally expensive and, in our best recorded run, took around **5 hours**.
